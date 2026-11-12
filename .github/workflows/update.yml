@@ -28,16 +28,24 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p dist temp_zip
-          # Use GitHub's official authenticated CLI to grab the real release zip
           gh release download --repo storytold/photocraft --pattern "photocraft-web-*.zip" --dir temp_zip
           unzip -q temp_zip/*.zip -d dist
           
-          # Ensure index.html is sitting right at the root of dist
+          # 1. Ensure index.html is at the root of dist
           if [ ! -f dist/index.html ]; then
             SUBDIR=$(find dist -mindepth 1 -maxdepth 1 -type d | head -n 1)
             if [ -n "$SUBDIR" ] && [ -f "$SUBDIR/index.html" ]; then
               mv "$SUBDIR"/* dist/
             fi
+          fi
+
+          # 2. Disable Jekyll so GitHub Pages allows .part-aa chunks and WASM files
+          touch dist/.nojekyll
+
+          # 3. Fix Issue #10092 (subpath snippets folder resolution)
+          if [ -d dist/snippets ]; then
+            mkdir -p dist/app/snippets
+            cp -r dist/snippets/* dist/app/snippets/ 2>/dev/null || true
           fi
 
       - name: Setup Pages
