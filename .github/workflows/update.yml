@@ -1,0 +1,44 @@
+name: Auto-Deploy Latest PhotoCraft Web
+
+on:
+  schedule:
+    - cron: '0 */6 * * *' # Automatically checks every 6 hours
+  workflow_dispatch:      # Lets you click "Run" anytime manually
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: 'pages'
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download & Extract Latest Web Build
+        run: |
+          mkdir -p dist
+          ZIP_URL=$(curl -s https://api.github.com/repos/storytold/photocraft/releases/latest | grep "browser_download_url.*photocraft-web-.*\.zip" | cut -d : -f 2,3 | tr -d '\" ')
+          curl -L -o web.zip $ZIP_URL
+          unzip -q web.zip -d dist
+          # Inject coi-serviceworker to satisfy COOP/COEP on GitHub Pages
+          curl -s -o dist/coi-serviceworker.min.js https://raw.githubusercontent.com/gzuidhof/coi-serviceworker/master/coi-serviceworker.min.js
+          sed -i 's/<head>/<head><script src="coi-serviceworker.min.js"><\/script>/' dist/index.html
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'dist'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
