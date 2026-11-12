@@ -24,13 +24,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download & Extract Latest Web Build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          mkdir -p dist
-          ZIP_URL=$(curl -s https://api.github.com/repos/storytold/photocraft/releases/latest | grep "browser_download_url.*photocraft-web-.*\.zip" | cut -d : -f 2,3 | tr -d '\" ')
-          curl -L -o web.zip $ZIP_URL
-          unzip -q web.zip -d dist
-          curl -s -o dist/coi-serviceworker.min.js https://raw.githubusercontent.com/gzuidhof/coi-serviceworker/master/coi-serviceworker.min.js
-          sed -i 's/<head>/<head><script src="coi-serviceworker.min.js"><\/script>/' dist/index.html
+          mkdir -p dist temp_zip
+          # Use GitHub's official authenticated CLI to grab the real release zip
+          gh release download --repo storytold/photocraft --pattern "photocraft-web-*.zip" --dir temp_zip
+          unzip -q temp_zip/*.zip -d dist
+          
+          # Ensure index.html is sitting right at the root of dist
+          if [ ! -f dist/index.html ]; then
+            SUBDIR=$(find dist -mindepth 1 -maxdepth 1 -type d | head -n 1)
+            if [ -n "$SUBDIR" ] && [ -f "$SUBDIR/index.html" ]; then
+              mv "$SUBDIR"/* dist/
+            fi
+          fi
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
