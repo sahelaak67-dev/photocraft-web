@@ -1,4 +1,5 @@
-name: Auto-Deploy Latest PhotoCraft Web
+
+name: Auto-Deploy Latest PhotoCraft + FilmCraft Web
 
 on:
   push:
@@ -22,39 +23,262 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+
     steps:
-      - name: Download & Extract Latest Web Build
+      - name: Download & Extract Latest Web Builds
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
         run: |
+          set -euo pipefail
+
           mkdir -p dist temp_zip
-          gh release download --repo storytold/photocraft --pattern "photocraft-web-*.zip" --dir temp_zip
-          unzip -q temp_zip/*.zip -d dist
-          
-          # 1. Ensure index.html is at the root of dist
-          if [ ! -f dist/index.html ]; then
-            SUBDIR=$(find dist -mindepth 1 -maxdepth 1 -type d | head -n 1)
-            if [ -n "$SUBDIR" ] && [ -f "$SUBDIR/index.html" ]; then
-              mv "$SUBDIR"/* dist/
+
+          # Function for downloading and extracting an app
+          download_app() {
+            local repo="$1"
+            local pattern="$2"
+            local destination="$3"
+            local temp_dir="$4"
+
+            echo "Downloading $repo..."
+
+            mkdir -p "$destination" "$temp_dir"
+
+            gh release download \
+              --repo "$repo" \
+              --pattern "$pattern" \
+              --dir "$temp_dir"
+
+            # Make sure exactly one ZIP was downloaded
+            shopt -s nullglob
+            local archives=("$temp_dir"/*.zip)
+
+            if [ "${#archives[@]}" -ne 1 ]; then
+              echo "::error::Expected one ZIP for $repo, found ${#archives[@]}"
+              exit 1
             fi
+
+            echo "Extracting ${archives[0]}..."
+
+            unzip -q "${archives[0]}" -d "$destination"
+
+            # Move index.html to the application root
+            if [ ! -f "$destination/index.html" ]; then
+              local nested_index
+
+              nested_index=$(find "$destination" \
+                -mindepth 2 -type f -name index.html -print -quit)
+
+              if [ -z "$nested_index" ]; then
+                echo "::error::index.html missing for $repo"
+                exit 1
+              fi
+
+              local nested_root="${nested_index%/index.html}"
+
+              cp -a "$nested_root/." "$destination/"
+              rm -rf "$nested_root"
+            fi
+
+            # Disable Jekyll
+            touch "$destination/.nojekyll"
+
+            echo "$repo successfully prepared!"
+          }
+
+          # Download PhotoCraft
+          download_app \
+            "storytold/photocraft" \
+            "photocraft-web-*.zip" \
+            "dist/photocraft" \
+            "temp_zip/photocraft"
+
+          # Download FilmCraft
+          download_app \
+            "storytold/filmcraft" \
+            "filmcraft-web-*.zip" \
+            "dist/filmcraft" \
+            "temp_zip/filmcraft"
+
+          # PhotoCraft Issue #10092 fix
+          if [ -d dist/photocraft/snippets ]; then
+            mkdir -p dist/photocraft/app/snippets
+            cp -a dist/photocraft/snippets/. \
+              dist/photocraft/app/snippets/
           fi
 
-          # 2. Disable Jekyll so GitHub Pages allows .part-aa chunks and WASM files
+          echo "Both applications are ready!"
+
+      - name: Create Starting Page
+        run: |
+          cat > dist/index.html <<'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Craft Studio</title>
+
+            <style>
+              * {
+                box-sizing: border-box;
+              }
+
+              body {
+                margin: 0;
+                min-height: 100vh;
+                font-family: system-ui, sans-serif;
+                background: #101116;
+                color: white;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 24px;
+              }
+
+              .container {
+                width: 100%;
+                max-width: 850px;
+                text-align: center;
+              }
+
+              h1 {
+                font-size: clamp(36px, 7vw, 58px);
+                margin-bottom: 10px;
+                letter-spacing: -2px;
+              }
+
+              .subtitle {
+                color: #999ca9;
+                margin-bottom: 48px;
+                font-size: 16px;
+              }
+
+              .apps {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 20px;
+              }
+
+              .app {
+                display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+                text-align: left;
+                text-decoration: none;
+                color: white;
+                background: #1b1d25;
+                border: 1px solid #30323c;
+                border-radius: 18px;
+                padding: 30px;
+                min-height: 220px;
+                transition: 0.2s ease;
+              }
+
+              .app:hover {
+                transform: translateY(-5px);
+                border-color: #777b91;
+                background: #22252f;
+              }
+
+              .app h2 {
+                margin: 14px 0 8px;
+                font-size: 28px;
+              }
+
+              .app p {
+                color: #a4a6b2;
+                line-height: 1.6;
+                margin: 0;
+              }
+
+              .category {
+                color: #a8abc0;
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: 2px;
+              }
+
+              .launch {
+                margin-top: auto;
+                padding-top: 24px;
+                font-size: 14px;
+                font-weight: 600;
+              }
+
+              footer {
+                margin-top: 45px;
+                color: #646775;
+                font-size: 12px;
+              }
+
+              @media (max-width: 600px) {
+                .apps {
+                  grid-template-columns: 1fr;
+                }
+
+                .subtitle {
+                  margin-bottom: 30px;
+                }
+              }
+            </style>
+          </head>
+
+          <body>
+            <main class="container">
+              <h1>Craft Studio</h1>
+              <p class="subtitle">
+                Choose an application to get started.
+              </p>
+
+              <div class="apps">
+
+                <a class="app" href="./photocraft/">
+                  <span class="category">IMAGE EDITING</span>
+                  <h2>PhotoCraft</h2>
+                  <p>
+                    Edit images, work with layers, masks,
+                    typography and more.
+                  </p>
+                  <span class="launch">Open PhotoCraft →</span>
+                </a>
+
+                <a class="app" href="./filmcraft/">
+                  <span class="category">VIDEO EDITING</span>
+                  <h2>FilmCraft</h2>
+                  <p>
+                    Edit videos, work with timelines,
+                    effects, audio and more.
+                  </p>
+                  <span class="launch">Open FilmCraft →</span>
+                </a>
+
+              </div>
+
+              <footer>
+                Craft Studio · PhotoCraft + FilmCraft
+              </footer>
+            </main>
+          </body>
+          </html>
+          EOF
+
           touch dist/.nojekyll
 
-          # 3. Fix Issue #10092 (subpath snippets folder resolution)
-          if [ -d dist/snippets ]; then
-            mkdir -p dist/app/snippets
-            cp -r dist/snippets/* dist/app/snippets/ 2>/dev/null || true
-          fi
+      - name: Validate Deployment
+        run: |
+          test -f dist/index.html
+          test -f dist/photocraft/index.html
+          test -f dist/filmcraft/index.html
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload artifact
+      - name: Upload Artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: 'dist'
+          path: dist
 
       - name: Deploy to GitHub Pages
         id: deployment
