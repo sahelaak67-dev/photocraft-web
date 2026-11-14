@@ -1,5 +1,4 @@
-
-name: Auto-Deploy Latest PhotoCraft + FilmCraft Web
+name: Auto-Deploy ArtCraft Suite Portal & Web Editor
 
 on:
   push:
@@ -23,262 +22,373 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
-
     steps:
-      - name: Download & Extract Latest Web Builds
+      - name: Build Portal & Download Latest PhotoCraft Web
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
         run: |
-          set -euo pipefail
+          mkdir -p dist/editor temp_zip
 
-          mkdir -p dist temp_zip
-
-          # Function for downloading and extracting an app
-          download_app() {
-            local repo="$1"
-            local pattern="$2"
-            local destination="$3"
-            local temp_dir="$4"
-
-            echo "Downloading $repo..."
-
-            mkdir -p "$destination" "$temp_dir"
-
-            gh release download \
-              --repo "$repo" \
-              --pattern "$pattern" \
-              --dir "$temp_dir"
-
-            # Make sure exactly one ZIP was downloaded
-            shopt -s nullglob
-            local archives=("$temp_dir"/*.zip)
-
-            if [ "${#archives[@]}" -ne 1 ]; then
-              echo "::error::Expected one ZIP for $repo, found ${#archives[@]}"
-              exit 1
+          # 1. Download & Extract PhotoCraft Web into dist/editor/
+          gh release download --repo storytold/photocraft --pattern "photocraft-web-*.zip" --dir temp_zip
+          unzip -q temp_zip/*.zip -d dist/editor
+          
+          # Flatten nested folder if present
+          if [ ! -f dist/editor/index.html ]; then
+            SUBDIR=$(find dist/editor -mindepth 1 -maxdepth 1 -type d | head -n 1)
+            if [ -n "$SUBDIR" ] && [ -f "$SUBDIR/index.html" ]; then
+              mv "$SUBDIR"/* dist/editor/
             fi
-
-            echo "Extracting ${archives[0]}..."
-
-            unzip -q "${archives[0]}" -d "$destination"
-
-            # Move index.html to the application root
-            if [ ! -f "$destination/index.html" ]; then
-              local nested_index
-
-              nested_index=$(find "$destination" \
-                -mindepth 2 -type f -name index.html -print -quit)
-
-              if [ -z "$nested_index" ]; then
-                echo "::error::index.html missing for $repo"
-                exit 1
-              fi
-
-              local nested_root="${nested_index%/index.html}"
-
-              cp -a "$nested_root/." "$destination/"
-              rm -rf "$nested_root"
-            fi
-
-            # Disable Jekyll
-            touch "$destination/.nojekyll"
-
-            echo "$repo successfully prepared!"
-          }
-
-          # Download PhotoCraft
-          download_app \
-            "storytold/photocraft" \
-            "photocraft-web-*.zip" \
-            "dist/photocraft" \
-            "temp_zip/photocraft"
-
-          # Download FilmCraft
-          download_app \
-            "storytold/filmcraft" \
-            "filmcraft-web-*.zip" \
-            "dist/filmcraft" \
-            "temp_zip/filmcraft"
-
-          # PhotoCraft Issue #10092 fix
-          if [ -d dist/photocraft/snippets ]; then
-            mkdir -p dist/photocraft/app/snippets
-            cp -a dist/photocraft/snippets/. \
-              dist/photocraft/app/snippets/
           fi
 
-          echo "Both applications are ready!"
+          # Disable Jekyll and fix subpath snippets for WebAssembly
+          touch dist/.nojekyll
+          if [ -d dist/editor/snippets ]; then
+            mkdir -p dist/editor/app/snippets
+            cp -r dist/editor/snippets/* dist/editor/app/snippets/ 2>/dev/null || true
+          fi
 
-      - name: Create Starting Page
-        run: |
-          cat > dist/index.html <<'EOF'
+          # 2. Generate the Suite Portal Landing Page at dist/index.html
+          cat << 'EOF' > dist/index.html
           <!DOCTYPE html>
           <html lang="en">
           <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Craft Studio</title>
-
+            <title>ArtCraft App Suite • Open Source & Pure Rust</title>
+            <link rel="preconnect" href="https://fonts.googleapis.com">
+            <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
             <style>
-              * {
-                box-sizing: border-box;
+              :root {
+                --bg: #090c10;
+                --surface: #111620;
+                --border: #212633;
+                --text: #f0f6fc;
+                --muted: #8b949e;
+                --accent-blue: #388bfd;
+                --accent-purple: #a371f7;
+                --accent-green: #3fb950;
+                --accent-orange: #f0883e;
+                --card-hover: #161c28;
               }
-
+              * { box-sizing: border-box; margin: 0; padding: 0; }
               body {
-                margin: 0;
-                min-height: 100vh;
-                font-family: system-ui, sans-serif;
-                background: #101116;
-                color: white;
+                background-color: var(--bg);
+                color: var(--text);
+                font-family: 'Inter', -apple-system, sans-serif;
+                line-height: 1.5;
+                padding-bottom: 60px;
+              }
+              header {
+                max-width: 1200px;
+                margin: 0 auto;
+                padding: 60px 20px 40px;
+                text-align: center;
+              }
+              .badge {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                background: rgba(56, 139, 253, 0.15);
+                border: 1px solid rgba(56, 139, 253, 0.4);
+                color: var(--accent-blue);
+                font-size: 0.85rem;
+                font-weight: 600;
+                padding: 6px 14px;
+                border-radius: 999px;
+                margin-bottom: 20px;
+                font-family: 'JetBrains Mono', monospace;
+              }
+              h1 {
+                font-size: clamp(2.2rem, 5vw, 3.5rem);
+                font-weight: 800;
+                letter-spacing: -0.03em;
+                background: linear-gradient(135deg, #ffffff 30%, #8b949e 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                margin-bottom: 16px;
+              }
+              p.lead {
+                color: var(--muted);
+                font-size: 1.15rem;
+                max-width: 700px;
+                margin: 0 auto 30px;
+              }
+              .hero-buttons {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 14px;
+                justify-content: center;
+                margin-bottom: 40px;
+              }
+              .btn {
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                padding: 12px 24px;
+                font-size: 1rem;
+                font-weight: 600;
+                border-radius: 10px;
+                text-decoration: none;
+                transition: all 0.2s ease;
+              }
+              .btn-primary {
+                background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+                color: #fff;
+                box-shadow: 0 4px 20px rgba(56, 139, 253, 0.3);
+              }
+              .btn-primary:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 25px rgba(56, 139, 253, 0.45);
+              }
+              .btn-secondary {
+                background: var(--surface);
+                color: var(--text);
+                border: 1px solid var(--border);
+              }
+              .btn-secondary:hover {
+                background: var(--card-hover);
+                border-color: #384152;
+              }
+              .controls {
+                max-width: 1200px;
+                margin: 0 auto 30px;
+                padding: 0 20px;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 14px;
+                justify-content: space-between;
+                align-items: center;
+              }
+              .search-box {
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: 8px;
+                padding: 10px 16px;
+                color: #fff;
+                font-size: 0.95rem;
+                width: 100%;
+                max-width: 320px;
+              }
+              .search-box:focus {
+                outline: none;
+                border-color: var(--accent-blue);
+              }
+              .filters {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+              }
+              .filter-btn {
+                background: var(--surface);
+                border: 1px solid var(--border);
+                color: var(--muted);
+                padding: 6px 14px;
+                border-radius: 8px;
+                font-size: 0.85rem;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.15s ease;
+              }
+              .filter-btn.active, .filter-btn:hover {
+                background: #1c2333;
+                color: #fff;
+                border-color: #384152;
+              }
+              .grid {
+                max-width: 1200px;
+                margin: 0 auto;
+                padding: 0 20px;
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+                gap: 20px;
+              }
+              .card {
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: 14px;
+                padding: 24px;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+                transition: all 0.2s ease;
+              }
+              .card:hover {
+                transform: translateY(-3px);
+                border-color: #384152;
+                background: var(--card-hover);
+              }
+              .card-header {
+                display: flex;
+                align-items: center;
+                gap: 14px;
+                margin-bottom: 12px;
+              }
+              .icon-box {
+                width: 44px;
+                height: 44px;
+                border-radius: 10px;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                padding: 24px;
+                font-weight: 800;
+                font-size: 1.1rem;
               }
-
-              .container {
-                width: 100%;
-                max-width: 850px;
-                text-align: center;
-              }
-
-              h1 {
-                font-size: clamp(36px, 7vw, 58px);
-                margin-bottom: 10px;
-                letter-spacing: -2px;
-              }
-
-              .subtitle {
-                color: #999ca9;
-                margin-bottom: 48px;
-                font-size: 16px;
-              }
-
-              .apps {
-                display: grid;
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-                gap: 20px;
-              }
-
-              .app {
-                display: flex;
-                flex-direction: column;
-                align-items: flex-start;
-                text-align: left;
-                text-decoration: none;
-                color: white;
-                background: #1b1d25;
-                border: 1px solid #30323c;
-                border-radius: 18px;
-                padding: 30px;
-                min-height: 220px;
-                transition: 0.2s ease;
-              }
-
-              .app:hover {
-                transform: translateY(-5px);
-                border-color: #777b91;
-                background: #22252f;
-              }
-
-              .app h2 {
-                margin: 14px 0 8px;
-                font-size: 28px;
-              }
-
-              .app p {
-                color: #a4a6b2;
-                line-height: 1.6;
-                margin: 0;
-              }
-
-              .category {
-                color: #a8abc0;
-                font-size: 11px;
+              .card-title h3 {
+                font-size: 1.15rem;
                 font-weight: 700;
-                letter-spacing: 2px;
               }
-
-              .launch {
-                margin-top: auto;
-                padding-top: 24px;
-                font-size: 14px;
+              .card-title span {
+                font-size: 0.8rem;
+                color: var(--muted);
+                display: block;
+              }
+              .desc {
+                font-size: 0.9rem;
+                color: #c9d1d9;
+                margin-bottom: 18px;
+                flex-grow: 1;
+              }
+              .card-actions {
+                display: flex;
+                gap: 10px;
+                border-top: 1px solid rgba(255,255,255,0.06);
+                padding-top: 14px;
+              }
+              .card-link {
+                font-size: 0.85rem;
                 font-weight: 600;
+                text-decoration: none;
+                color: var(--accent-blue);
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
               }
-
+              .card-link:hover { text-decoration: underline; }
+              .card-link.btn-web {
+                background: rgba(56, 139, 253, 0.15);
+                padding: 6px 12px;
+                border-radius: 6px;
+                color: #79c0ff;
+              }
               footer {
-                margin-top: 45px;
-                color: #646775;
-                font-size: 12px;
-              }
-
-              @media (max-width: 600px) {
-                .apps {
-                  grid-template-columns: 1fr;
-                }
-
-                .subtitle {
-                  margin-bottom: 30px;
-                }
+                text-align: center;
+                margin-top: 80px;
+                font-size: 0.85rem;
+                color: var(--muted);
               }
             </style>
           </head>
-
           <body>
-            <main class="container">
-              <h1>Craft Studio</h1>
-              <p class="subtitle">
-                Choose an application to get started.
-              </p>
-
-              <div class="apps">
-
-                <a class="app" href="./photocraft/">
-                  <span class="category">IMAGE EDITING</span>
-                  <h2>PhotoCraft</h2>
-                  <p>
-                    Edit images, work with layers, masks,
-                    typography and more.
-                  </p>
-                  <span class="launch">Open PhotoCraft →</span>
-                </a>
-
-                <a class="app" href="./filmcraft/">
-                  <span class="category">VIDEO EDITING</span>
-                  <h2>FilmCraft</h2>
-                  <p>
-                    Edit videos, work with timelines,
-                    effects, audio and more.
-                  </p>
-                  <span class="launch">Open FilmCraft →</span>
-                </a>
-
+            <header>
+              <div class="badge">PURE RUST • NO SUBSCRIPTION • LOCAL FIRST</div>
+              <h1>ArtCraft Application Suite</h1>
+              <p class="lead">The open-source, memory-safe creative and productivity suite designed for high performance and AI agent automation.</p>
+              <div class="hero-buttons">
+                <a href="./editor/" class="btn btn-primary">🚀 Launch PhotoCraft Web</a>
+                <a href="https://github.com/storytold/craft-launcher" class="btn btn-secondary" target="_blank">⬇ Get ArtCraft Launcher</a>
               </div>
+            </header>
 
-              <footer>
-                Craft Studio · PhotoCraft + FilmCraft
-              </footer>
-            </main>
+            <div class="controls">
+              <input type="text" id="search" class="search-box" placeholder="Search apps, targets, or tools...">
+              <div class="filters">
+                <button class="filter-btn active" data-filter="all">All (18)</button>
+                <button class="filter-btn" data-filter="creative">Creative 2D</button>
+                <button class="filter-btn" data-filter="video">Video & Audio</button>
+                <button class="filter-btn" data-filter="3d">3D & CAD</button>
+                <button class="filter-btn" data-filter="office">Documents</button>
+              </div>
+            </div>
+
+            <main class="grid" id="appGrid"></main>
+
+            <footer>
+              <p>Powered by Storytold, Tangency Labs, and the Open Source Community • MIT & Apache 2.0</p>
+            </footer>
+
+            <script>
+              const apps = [
+                { name: "PhotoCraft", target: "Adobe Photoshop", cat: "creative", color: "#31A8FF", bg: "rgba(49,168,255,0.15)", desc: "Layered raster image editor with native CMYK, adjustment layers, Curves, and copy-on-write 256px tile engine.", web: "./editor/", repo: "storytold/photocraft" },
+                { name: "VectorCraft", target: "Adobe Illustrator", cat: "creative", color: "#FF9A00", bg: "rgba(255,154,0,0.15)", desc: "GPU-accelerated vector graphic design with subpixel Bézier path math, boolean cuts, and SVG export.", repo: "storytold/vectorcraft" },
+                { name: "FilmCraft", target: "Adobe Premiere Pro", cat: "video", color: "#9999FF", bg: "rgba(153,153,255,0.15)", desc: "Non-linear video editor built with exact rational time math, multi-track timelines, and three-way color grading.", repo: "storytold/filmcraft" },
+                { name: "EffectCraft", target: "Adobe After Effects", cat: "video", color: "#B388FF", bg: "rgba(179,136,255,0.15)", desc: "Motion graphics and visual effects compositor with keyframed value graphs and timeline animation buffers.", repo: "storytold/effectcraft" },
+                { name: "LightCraft", target: "Adobe Lightroom", cat: "creative", color: "#31A8FF", bg: "rgba(49,168,255,0.15)", desc: "32-bit floating point scene-referred RAW darkroom with log-luminance highlight recovery and 8-band color mixer.", repo: "storytold/lightcraft" },
+                { name: "TextureCraft", target: "Substance 3D Painter", cat: "3d", color: "#E53935", bg: "rgba(229,57,53,0.15)", desc: "3D model texture painter with PBR multi-channel layers (Metallic, Roughness, Normal) and mesh curvature baking.", repo: "storytold/texturecraft" },
+                { name: "MaterialCraft", target: "Substance 3D Designer", cat: "3d", color: "#FF5722", bg: "rgba(255,87,34,0.15)", desc: "Node-based procedural PBR texture and material graph generator running on wgpu compute shaders.", repo: "storytold/materialcraft" },
+                { name: "SolidCraft", target: "Fusion 360 / SolidWorks", cat: "3d", color: "#00B0FF", bg: "rgba(0,176,255,0.15)", desc: "3D parametric CAD modeler with 2D constraint solving, timeline feature history, and sheet metal unbending.", repo: "tangency-labs/solidcraft" },
+                { name: "CADCraft", target: "Autodesk AutoCAD 2D", cat: "3d", color: "#D50000", bg: "rgba(213,0,0,0.15)", desc: "Precision 2D architectural drafting and engineering drafting with AutoLISP integration and native DWG/DXF.", repo: "storytold/cadcraft" },
+                { name: "DesignCraft", target: "Adobe InDesign", cat: "creative", color: "#FF3366", bg: "rgba(255,51,102,0.15)", desc: "Desktop publishing suite with threaded text frame containers, multi-page master spreads, and preflight checks.", repo: "storytold/designcraft" },
+                { name: "PdfCraft", target: "Adobe Acrobat Pro", cat: "office", color: "#FF2600", bg: "rgba(255,38,0,0.15)", desc: "Ultra-fast PDF object tree editor for page reordering, text redaction, annotations, and form fill.", repo: "storytold/pdfcraft" },
+                { name: "WordCraft", target: "Microsoft Word", cat: "office", color: "#2B579A", bg: "rgba(43,87,154,0.15)", desc: "Distraction-free document editor with complex DOCX table layouts, footnotes, and offline spellchecking.", repo: "storytold/wordcraft" },
+                { name: "GridCraft", target: "Microsoft Excel", cat: "office", color: "#217346", bg: "rgba(33,115,70,0.15)", desc: "High-performance spreadsheet with precedent audit arrows, formula engines, and point-accurate formatting.", repo: "storytold/gridcraft" },
+                { name: "DeckCraft", target: "Microsoft PowerPoint", cat: "office", color: "#D24726", bg: "rgba(210,71,38,0.15)", desc: "Presentation slide deck builder with shape grouping, transition animations, and PPTX roundtripping.", repo: "storytold/deckcraft" },
+                { name: "SoundCraft", target: "Pro Tools / Audition", cat: "video", color: "#00E699", bg: "rgba(0,230,153,0.15)", desc: "Multi-track audio workstation with sample-accurate cuts, LUFS loudness monitoring, and VST3/CLAP hosting.", repo: "storytold/soundcraft" },
+                { name: "FigCraft", target: "Figma", cat: "creative", color: "#A259FF", bg: "rgba(162,89,255,0.15)", desc: "Collaborative interface and UI layout tool with auto-layout flex frames and self-hostable server runtime.", repo: "storytold/figcraft" },
+                { name: "Craft Anything", target: "AI App Foundry", cat: "meta", color: "#FDD835", bg: "rgba(253,216,53,0.15)", desc: "The clean-room meta-engine workbench that uses Claude Code to reverse-engineer and scaffold new Rust apps.", repo: "storytold/craft-anything" },
+                { name: "ArtCraft Launcher", target: "Universal Manager", cat: "meta", color: "#FFFFFF", bg: "rgba(255,255,255,0.15)", desc: "Unified desktop launcher that automatically installs, updates, and verifies signed binaries for the suite.", repo: "storytold/craft-launcher" }
+              ];
+
+              const grid = document.getElementById('appGrid');
+              const searchInput = document.getElementById('search');
+              const filterBtns = document.querySelectorAll('.filter-btn');
+
+              function render(items) {
+                grid.innerHTML = items.map(app => `
+                  <article class="card">
+                    <div>
+                      <div class="card-header">
+                        <div class="icon-box" style="color: ${app.color}; background: ${app.bg}">${app.name.charAt(0)}</div>
+                        <div class="card-title">
+                          <h3>${app.name}</h3>
+                          <span>vs. ${app.target}</span>
+                        </div>
+                      </div>
+                      <p class="desc">${app.desc}</p>
+                    </div>
+                    <div class="card-actions">
+                      ${app.web ? `<a href="${app.web}" class="card-link btn-web">⚡ Open Web App</a>` : ''}
+                      <a href="https://github.com/${app.repo}" class="card-link" target="_blank">GitHub →</a>
+                      <a href="https://github.com/${app.repo}/releases" class="card-link" target="_blank">Releases</a>
+                    </div>
+                  </article>
+                `).join('');
+              }
+
+              function filterApps() {
+                const term = searchInput.value.toLowerCase();
+                const activeCat = document.querySelector('.filter-btn.active').dataset.filter;
+                const filtered = apps.filter(app => {
+                  const matchesSearch = app.name.toLowerCase().includes(term) || app.target.toLowerCase().includes(term) || app.desc.toLowerCase().includes(term);
+                  const matchesCat = (activeCat === 'all') || (app.cat === activeCat);
+                  return matchesSearch && matchesCat;
+                });
+                render(filtered);
+              }
+
+              searchInput.addEventListener('input', filterApps);
+              filterBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                  filterBtns.forEach(b => b.classList.remove('active'));
+                  btn.classList.add('active');
+                  filterApps();
+                });
+              });
+
+              render(apps);
+            </script>
           </body>
           </html>
           EOF
 
-          touch dist/.nojekyll
-
-      - name: Validate Deployment
-        run: |
-          test -f dist/index.html
-          test -f dist/photocraft/index.html
-          test -f dist/filmcraft/index.html
-
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload Artifact
+      - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: 'dist'
 
       - name: Deploy to GitHub Pages
         id: deployment
