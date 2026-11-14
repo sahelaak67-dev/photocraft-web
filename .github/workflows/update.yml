@@ -29,19 +29,16 @@ jobs:
         run: |
           mkdir -p dist temp_zip
 
-          # List of apps to fetch WebAssembly builds for:
           APPS=("photocraft" "vectorcraft" "filmcraft" "lightcraft" "effectcraft" "pdfcraft" "gridcraft" "wordcraft" "cadcraft" "designcraft")
 
           for APP in "${APPS[@]}"; do
             echo "Fetching latest web release for $APP..."
             mkdir -p "dist/$APP" "temp_zip/$APP"
-            # Attempt to download web zip if available in latest release
             gh release download --repo "storytold/$APP" --pattern "*web*.zip" --dir "temp_zip/$APP" 2>/dev/null || true
             
             if ls temp_zip/$APP/*.zip 1> /dev/null 2>&1; then
               unzip -q temp_zip/$APP/*.zip -d "dist/$APP"
               
-              # Flatten if nested in a subfolder
               if [ ! -f "dist/$APP/index.html" ]; then
                 SUBDIR=$(find "dist/$APP" -mindepth 1 -maxdepth 1 -type d | head -n 1)
                 if [ -n "$SUBDIR" ] && [ -f "$SUBDIR/index.html" ]; then
@@ -49,7 +46,6 @@ jobs:
                 fi
               fi
 
-              # Fix subpath snippets issue
               if [ -d "dist/$APP/snippets" ]; then
                 mkdir -p "dist/$APP/app/snippets"
                 cp -r "dist/$APP/snippets"/* "dist/$APP/app/snippets/" 2>/dev/null || true
@@ -57,7 +53,7 @@ jobs:
             fi
           done
 
-          # Disable Jekyll for the entire site (enables .part-aa chunks and WASM across all apps)
+          # Disable Jekyll for the entire site
           touch dist/.nojekyll
 
           # Generate the Master Portal Landing Page
@@ -80,7 +76,7 @@ jobs:
                 --muted: #8b949e;
                 --accent-blue: #388bfd;
                 --accent-purple: #a371f7;
-                --card-hover: #161c28;
+                --card-hover: #171d2b;
               }
               * { box-sizing: border-box; margin: 0; padding: 0; }
               body {
@@ -186,12 +182,15 @@ jobs:
                 display: flex;
                 flex-direction: column;
                 justify-content: space-between;
-                transition: all 0.2s ease;
+                cursor: pointer;
+                user-select: none;
+                transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
               }
               .card:hover {
-                transform: translateY(-3px);
-                border-color: #384152;
+                transform: translateY(-4px);
+                border-color: var(--accent-blue);
                 background: var(--card-hover);
+                box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
               }
               .card-header {
                 display: flex;
@@ -240,19 +239,16 @@ jobs:
                 font-size: 0.85rem;
                 padding: 8px 14px;
                 border-radius: 8px;
-                text-decoration: none;
                 display: inline-flex;
                 align-items: center;
                 gap: 6px;
-                transition: all 0.2s ease;
-              }
-              .btn-launch:hover {
-                box-shadow: 0 4px 15px rgba(56, 139, 253, 0.4);
-                transform: translateY(-1px);
+                pointer-events: none; /* Clicking the button bubbles directly to the card handler */
               }
               .card-links {
                 display: flex;
                 gap: 12px;
+                position: relative;
+                z-index: 2; /* Keeps external links clickable without triggering the card navigation */
               }
               .card-link {
                 font-size: 0.85rem;
@@ -273,7 +269,7 @@ jobs:
             <header>
               <div class="badge">PURE RUST • RUNS 100% IN BROWSER • NO INSTALL</div>
               <h1>ArtCraft Web Suite</h1>
-              <p class="lead">Open-source creative and productivity applications compiled to WebAssembly. Click any app below to launch it directly in your browser.</p>
+              <p class="lead">Open-source creative and productivity applications compiled to WebAssembly. Tap any card below to launch that application.</p>
             </header>
 
             <div class="controls">
@@ -312,9 +308,20 @@ jobs:
               const searchInput = document.getElementById('search');
               const filterBtns = document.querySelectorAll('.filter-btn');
 
+              function handleCardClick(e, url) {
+                // If clicking GitHub or Releases links, don't trigger the card launch
+                if (e.target.closest('.card-link')) return;
+                
+                if (url.startsWith('http')) {
+                  window.open(url, '_blank');
+                } else {
+                  window.location.href = url;
+                }
+              }
+
               function render(items) {
                 grid.innerHTML = items.map(app => `
-                  <article class="card">
+                  <article class="card" onclick="handleCardClick(event, '${app.url}')">
                     <div>
                       <div class="card-header">
                         <div class="icon-box" style="color: ${app.color}; background: ${app.bg}">${app.name.charAt(0)}</div>
@@ -326,10 +333,10 @@ jobs:
                       <p class="desc">${app.desc}</p>
                     </div>
                     <div class="card-actions">
-                      <a href="${app.url}" class="btn-launch">⚡ Launch Web App</a>
+                      <span class="btn-launch">⚡ Launch Web App</span>
                       <div class="card-links">
-                        <a href="https://github.com/${app.repo}" class="card-link" target="_blank">GitHub</a>
-                        <a href="https://github.com/${app.repo}/releases" class="card-link" target="_blank">Releases</a>
+                        <a href="https://github.com/${app.repo}" class="card-link" target="_blank" onclick="event.stopPropagation()">GitHub</a>
+                        <a href="https://github.com/${app.repo}/releases" class="card-link" target="_blank" onclick="event.stopPropagation()">Releases</a>
                       </div>
                     </div>
                   </article>
