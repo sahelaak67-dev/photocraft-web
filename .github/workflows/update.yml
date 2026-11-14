@@ -1,10 +1,10 @@
-name: Auto-Deploy ArtCraft Suite Portal & Web Editor
+name: Auto-Deploy Complete ArtCraft Web Suite
 
 on:
   push:
     branches: [ main, master ]
   schedule:
-    - cron: '0 * * * *'
+    - cron: '0 * * * *' # Checks for updates every single hour
   workflow_dispatch:
 
 permissions:
@@ -23,39 +23,51 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - name: Build Portal & Download Latest PhotoCraft Web
+      - name: Download & Extract All Craft Web Apps
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          mkdir -p dist/editor temp_zip
+          mkdir -p dist temp_zip
 
-          # 1. Download & Extract PhotoCraft Web into dist/editor/
-          gh release download --repo storytold/photocraft --pattern "photocraft-web-*.zip" --dir temp_zip
-          unzip -q temp_zip/*.zip -d dist/editor
-          
-          # Flatten nested folder if present
-          if [ ! -f dist/editor/index.html ]; then
-            SUBDIR=$(find dist/editor -mindepth 1 -maxdepth 1 -type d | head -n 1)
-            if [ -n "$SUBDIR" ] && [ -f "$SUBDIR/index.html" ]; then
-              mv "$SUBDIR"/* dist/editor/
+          # List of apps to fetch WebAssembly builds for:
+          APPS=("photocraft" "vectorcraft" "filmcraft" "lightcraft" "effectcraft" "pdfcraft" "gridcraft" "wordcraft" "cadcraft" "designcraft")
+
+          for APP in "${APPS[@]}"; do
+            echo "Fetching latest web release for $APP..."
+            mkdir -p "dist/$APP" "temp_zip/$APP"
+            # Attempt to download web zip if available in latest release
+            gh release download --repo "storytold/$APP" --pattern "*web*.zip" --dir "temp_zip/$APP" 2>/dev/null || true
+            
+            if ls temp_zip/$APP/*.zip 1> /dev/null 2>&1; then
+              unzip -q temp_zip/$APP/*.zip -d "dist/$APP"
+              
+              # Flatten if nested in a subfolder
+              if [ ! -f "dist/$APP/index.html" ]; then
+                SUBDIR=$(find "dist/$APP" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+                if [ -n "$SUBDIR" ] && [ -f "$SUBDIR/index.html" ]; then
+                  mv "$SUBDIR"/* "dist/$APP/"
+                fi
+              fi
+
+              # Fix subpath snippets issue
+              if [ -d "dist/$APP/snippets" ]; then
+                mkdir -p "dist/$APP/app/snippets"
+                cp -r "dist/$APP/snippets"/* "dist/$APP/app/snippets/" 2>/dev/null || true
+              fi
             fi
-          fi
+          done
 
-          # Disable Jekyll and fix subpath snippets for WebAssembly
+          # Disable Jekyll for the entire site (enables .part-aa chunks and WASM across all apps)
           touch dist/.nojekyll
-          if [ -d dist/editor/snippets ]; then
-            mkdir -p dist/editor/app/snippets
-            cp -r dist/editor/snippets/* dist/editor/app/snippets/ 2>/dev/null || true
-          fi
 
-          # 2. Generate the Suite Portal Landing Page at dist/index.html
+          # Generate the Master Portal Landing Page
           cat << 'EOF' > dist/index.html
           <!DOCTYPE html>
           <html lang="en">
           <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>ArtCraft App Suite • Open Source & Pure Rust</title>
+            <title>ArtCraft Web Suite • Open Source & Pure Rust</title>
             <link rel="preconnect" href="https://fonts.googleapis.com">
             <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
             <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
@@ -68,8 +80,6 @@ jobs:
                 --muted: #8b949e;
                 --accent-blue: #388bfd;
                 --accent-purple: #a371f7;
-                --accent-green: #3fb950;
-                --accent-orange: #f0883e;
                 --card-hover: #161c28;
               }
               * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -83,7 +93,7 @@ jobs:
               header {
                 max-width: 1200px;
                 margin: 0 auto;
-                padding: 60px 20px 40px;
+                padding: 60px 20px 30px;
                 text-align: center;
               }
               .badge {
@@ -97,7 +107,7 @@ jobs:
                 font-weight: 600;
                 padding: 6px 14px;
                 border-radius: 999px;
-                margin-bottom: 20px;
+                margin-bottom: 16px;
                 font-family: 'JetBrains Mono', monospace;
               }
               h1 {
@@ -107,49 +117,13 @@ jobs:
                 background: linear-gradient(135deg, #ffffff 30%, #8b949e 100%);
                 -webkit-background-clip: text;
                 -webkit-text-fill-color: transparent;
-                margin-bottom: 16px;
+                margin-bottom: 14px;
               }
               p.lead {
                 color: var(--muted);
                 font-size: 1.15rem;
-                max-width: 700px;
+                max-width: 720px;
                 margin: 0 auto 30px;
-              }
-              .hero-buttons {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 14px;
-                justify-content: center;
-                margin-bottom: 40px;
-              }
-              .btn {
-                display: inline-flex;
-                align-items: center;
-                gap: 8px;
-                padding: 12px 24px;
-                font-size: 1rem;
-                font-weight: 600;
-                border-radius: 10px;
-                text-decoration: none;
-                transition: all 0.2s ease;
-              }
-              .btn-primary {
-                background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
-                color: #fff;
-                box-shadow: 0 4px 20px rgba(56, 139, 253, 0.3);
-              }
-              .btn-primary:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 6px 25px rgba(56, 139, 253, 0.45);
-              }
-              .btn-secondary {
-                background: var(--surface);
-                color: var(--text);
-                border: 1px solid var(--border);
-              }
-              .btn-secondary:hover {
-                background: var(--card-hover);
-                border-color: #384152;
               }
               .controls {
                 max-width: 1200px;
@@ -252,26 +226,41 @@ jobs:
               }
               .card-actions {
                 display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                justify-content: space-between;
                 gap: 10px;
                 border-top: 1px solid rgba(255,255,255,0.06);
                 padding-top: 14px;
               }
-              .card-link {
-                font-size: 0.85rem;
+              .btn-launch {
+                background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+                color: #fff;
                 font-weight: 600;
+                font-size: 0.85rem;
+                padding: 8px 14px;
+                border-radius: 8px;
                 text-decoration: none;
-                color: var(--accent-blue);
                 display: inline-flex;
                 align-items: center;
-                gap: 4px;
+                gap: 6px;
+                transition: all 0.2s ease;
               }
-              .card-link:hover { text-decoration: underline; }
-              .card-link.btn-web {
-                background: rgba(56, 139, 253, 0.15);
-                padding: 6px 12px;
-                border-radius: 6px;
-                color: #79c0ff;
+              .btn-launch:hover {
+                box-shadow: 0 4px 15px rgba(56, 139, 253, 0.4);
+                transform: translateY(-1px);
               }
+              .card-links {
+                display: flex;
+                gap: 12px;
+              }
+              .card-link {
+                font-size: 0.85rem;
+                font-weight: 500;
+                text-decoration: none;
+                color: var(--muted);
+              }
+              .card-link:hover { color: #fff; text-decoration: underline; }
               footer {
                 text-align: center;
                 margin-top: 80px;
@@ -282,19 +271,15 @@ jobs:
           </head>
           <body>
             <header>
-              <div class="badge">PURE RUST • NO SUBSCRIPTION • LOCAL FIRST</div>
-              <h1>ArtCraft Application Suite</h1>
-              <p class="lead">The open-source, memory-safe creative and productivity suite designed for high performance and AI agent automation.</p>
-              <div class="hero-buttons">
-                <a href="./editor/" class="btn btn-primary">🚀 Launch PhotoCraft Web</a>
-                <a href="https://github.com/storytold/craft-launcher" class="btn btn-secondary" target="_blank">⬇ Get ArtCraft Launcher</a>
-              </div>
+              <div class="badge">PURE RUST • RUNS 100% IN BROWSER • NO INSTALL</div>
+              <h1>ArtCraft Web Suite</h1>
+              <p class="lead">Open-source creative and productivity applications compiled to WebAssembly. Click any app below to launch it directly in your browser.</p>
             </header>
 
             <div class="controls">
-              <input type="text" id="search" class="search-box" placeholder="Search apps, targets, or tools...">
+              <input type="text" id="search" class="search-box" placeholder="Search apps or tools...">
               <div class="filters">
-                <button class="filter-btn active" data-filter="all">All (18)</button>
+                <button class="filter-btn active" data-filter="all">All</button>
                 <button class="filter-btn" data-filter="creative">Creative 2D</button>
                 <button class="filter-btn" data-filter="video">Video & Audio</button>
                 <button class="filter-btn" data-filter="3d">3D & CAD</button>
@@ -305,29 +290,22 @@ jobs:
             <main class="grid" id="appGrid"></main>
 
             <footer>
-              <p>Powered by Storytold, Tangency Labs, and the Open Source Community • MIT & Apache 2.0</p>
+              <p>Powered by Storytold, Tangency Labs, and the Open Source Community • Updates hourly</p>
             </footer>
 
             <script>
               const apps = [
-                { name: "PhotoCraft", target: "Adobe Photoshop", cat: "creative", color: "#31A8FF", bg: "rgba(49,168,255,0.15)", desc: "Layered raster image editor with native CMYK, adjustment layers, Curves, and copy-on-write 256px tile engine.", web: "./editor/", repo: "storytold/photocraft" },
-                { name: "VectorCraft", target: "Adobe Illustrator", cat: "creative", color: "#FF9A00", bg: "rgba(255,154,0,0.15)", desc: "GPU-accelerated vector graphic design with subpixel Bézier path math, boolean cuts, and SVG export.", repo: "storytold/vectorcraft" },
-                { name: "FilmCraft", target: "Adobe Premiere Pro", cat: "video", color: "#9999FF", bg: "rgba(153,153,255,0.15)", desc: "Non-linear video editor built with exact rational time math, multi-track timelines, and three-way color grading.", repo: "storytold/filmcraft" },
-                { name: "EffectCraft", target: "Adobe After Effects", cat: "video", color: "#B388FF", bg: "rgba(179,136,255,0.15)", desc: "Motion graphics and visual effects compositor with keyframed value graphs and timeline animation buffers.", repo: "storytold/effectcraft" },
-                { name: "LightCraft", target: "Adobe Lightroom", cat: "creative", color: "#31A8FF", bg: "rgba(49,168,255,0.15)", desc: "32-bit floating point scene-referred RAW darkroom with log-luminance highlight recovery and 8-band color mixer.", repo: "storytold/lightcraft" },
-                { name: "TextureCraft", target: "Substance 3D Painter", cat: "3d", color: "#E53935", bg: "rgba(229,57,53,0.15)", desc: "3D model texture painter with PBR multi-channel layers (Metallic, Roughness, Normal) and mesh curvature baking.", repo: "storytold/texturecraft" },
-                { name: "MaterialCraft", target: "Substance 3D Designer", cat: "3d", color: "#FF5722", bg: "rgba(255,87,34,0.15)", desc: "Node-based procedural PBR texture and material graph generator running on wgpu compute shaders.", repo: "storytold/materialcraft" },
-                { name: "SolidCraft", target: "Fusion 360 / SolidWorks", cat: "3d", color: "#00B0FF", bg: "rgba(0,176,255,0.15)", desc: "3D parametric CAD modeler with 2D constraint solving, timeline feature history, and sheet metal unbending.", repo: "tangency-labs/solidcraft" },
-                { name: "CADCraft", target: "Autodesk AutoCAD 2D", cat: "3d", color: "#D50000", bg: "rgba(213,0,0,0.15)", desc: "Precision 2D architectural drafting and engineering drafting with AutoLISP integration and native DWG/DXF.", repo: "storytold/cadcraft" },
-                { name: "DesignCraft", target: "Adobe InDesign", cat: "creative", color: "#FF3366", bg: "rgba(255,51,102,0.15)", desc: "Desktop publishing suite with threaded text frame containers, multi-page master spreads, and preflight checks.", repo: "storytold/designcraft" },
-                { name: "PdfCraft", target: "Adobe Acrobat Pro", cat: "office", color: "#FF2600", bg: "rgba(255,38,0,0.15)", desc: "Ultra-fast PDF object tree editor for page reordering, text redaction, annotations, and form fill.", repo: "storytold/pdfcraft" },
-                { name: "WordCraft", target: "Microsoft Word", cat: "office", color: "#2B579A", bg: "rgba(43,87,154,0.15)", desc: "Distraction-free document editor with complex DOCX table layouts, footnotes, and offline spellchecking.", repo: "storytold/wordcraft" },
-                { name: "GridCraft", target: "Microsoft Excel", cat: "office", color: "#217346", bg: "rgba(33,115,70,0.15)", desc: "High-performance spreadsheet with precedent audit arrows, formula engines, and point-accurate formatting.", repo: "storytold/gridcraft" },
-                { name: "DeckCraft", target: "Microsoft PowerPoint", cat: "office", color: "#D24726", bg: "rgba(210,71,38,0.15)", desc: "Presentation slide deck builder with shape grouping, transition animations, and PPTX roundtripping.", repo: "storytold/deckcraft" },
-                { name: "SoundCraft", target: "Pro Tools / Audition", cat: "video", color: "#00E699", bg: "rgba(0,230,153,0.15)", desc: "Multi-track audio workstation with sample-accurate cuts, LUFS loudness monitoring, and VST3/CLAP hosting.", repo: "storytold/soundcraft" },
-                { name: "FigCraft", target: "Figma", cat: "creative", color: "#A259FF", bg: "rgba(162,89,255,0.15)", desc: "Collaborative interface and UI layout tool with auto-layout flex frames and self-hostable server runtime.", repo: "storytold/figcraft" },
-                { name: "Craft Anything", target: "AI App Foundry", cat: "meta", color: "#FDD835", bg: "rgba(253,216,53,0.15)", desc: "The clean-room meta-engine workbench that uses Claude Code to reverse-engineer and scaffold new Rust apps.", repo: "storytold/craft-anything" },
-                { name: "ArtCraft Launcher", target: "Universal Manager", cat: "meta", color: "#FFFFFF", bg: "rgba(255,255,255,0.15)", desc: "Unified desktop launcher that automatically installs, updates, and verifies signed binaries for the suite.", repo: "storytold/craft-launcher" }
+                { name: "PhotoCraft", target: "Adobe Photoshop", cat: "creative", color: "#31A8FF", bg: "rgba(49,168,255,0.15)", desc: "Layered raster editor with native CMYK, Curves, Levels, adjustment layers, and PSD support.", url: "./photocraft/", repo: "storytold/photocraft" },
+                { name: "VectorCraft", target: "Adobe Illustrator", cat: "creative", color: "#FF9A00", bg: "rgba(255,154,0,0.15)", desc: "GPU-accelerated vector graphic design with Bézier path geometry, boolean cuts, and SVG export.", url: "./vectorcraft/", repo: "storytold/vectorcraft" },
+                { name: "FilmCraft", target: "Adobe Premiere Pro", cat: "video", color: "#9999FF", bg: "rgba(153,153,255,0.15)", desc: "Non-linear video editor with integer time math, multi-track timelines, and three-way color grading.", url: "./filmcraft/", repo: "storytold/filmcraft" },
+                { name: "LightCraft", target: "Adobe Lightroom", cat: "creative", color: "#31A8FF", bg: "rgba(49,168,255,0.15)", desc: "32-bit float scene-referred RAW darkroom with log-luminance recovery and 8-band color mixer.", url: "./lightcraft/", repo: "storytold/lightcraft" },
+                { name: "EffectCraft", target: "Adobe After Effects", cat: "video", color: "#B388FF", bg: "rgba(179,136,255,0.15)", desc: "Motion graphics and visual effects compositor with keyframed value graphs and timeline buffers.", url: "./effectcraft/", repo: "storytold/effectcraft" },
+                { name: "SolidCraft", target: "Fusion 360 / SolidWorks", cat: "3d", color: "#00B0FF", bg: "rgba(0,176,255,0.15)", desc: "3D parametric CAD with 2D sketch constraint solver, timeline feature tree, and sheet metal unbending.", url: "https://solidcraft.io", repo: "tangency-labs/solidcraft" },
+                { name: "PdfCraft", target: "Adobe Acrobat Pro", cat: "office", color: "#FF2600", bg: "rgba(255,38,0,0.15)", desc: "Fast PDF object tree editor for page reordering, text redaction, annotations, and form fill.", url: "./pdfcraft/", repo: "storytold/pdfcraft" },
+                { name: "GridCraft", target: "Microsoft Excel", cat: "office", color: "#217346", bg: "rgba(33,115,70,0.15)", desc: "Spreadsheet engine with precedent audit arrows, point-accurate formatting, and high-speed formulas.", url: "./gridcraft/", repo: "storytold/gridcraft" },
+                { name: "WordCraft", target: "Microsoft Word", cat: "office", color: "#2B579A", bg: "rgba(43,87,154,0.15)", desc: "Document editor supporting DOCX tables, footnotes, margin rules, and offline spellchecking.", url: "./wordcraft/", repo: "storytold/wordcraft" },
+                { name: "CADCraft", target: "Autodesk AutoCAD 2D", cat: "3d", color: "#D50000", bg: "rgba(213,0,0,0.15)", desc: "2D precision drafting and architectural drafting with AutoLISP prompt support and native DXF.", url: "./cadcraft/", repo: "storytold/cadcraft" },
+                { name: "DesignCraft", target: "Adobe InDesign", cat: "creative", color: "#FF3366", bg: "rgba(255,51,102,0.15)", desc: "Desktop publishing with threaded text frames, multi-page master spreads, and preflight checks.", url: "./designcraft/", repo: "storytold/designcraft" }
               ];
 
               const grid = document.getElementById('appGrid');
@@ -348,9 +326,11 @@ jobs:
                       <p class="desc">${app.desc}</p>
                     </div>
                     <div class="card-actions">
-                      ${app.web ? `<a href="${app.web}" class="card-link btn-web">⚡ Open Web App</a>` : ''}
-                      <a href="https://github.com/${app.repo}" class="card-link" target="_blank">GitHub →</a>
-                      <a href="https://github.com/${app.repo}/releases" class="card-link" target="_blank">Releases</a>
+                      <a href="${app.url}" class="btn-launch">⚡ Launch Web App</a>
+                      <div class="card-links">
+                        <a href="https://github.com/${app.repo}" class="card-link" target="_blank">GitHub</a>
+                        <a href="https://github.com/${app.repo}/releases" class="card-link" target="_blank">Releases</a>
+                      </div>
                     </div>
                   </article>
                 `).join('');
