@@ -1,1 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ArtCraft Web Suite • Open Source & Pure Rust</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header>
+    <div class="badge">PURE RUST • RUNS 100% IN BROWSER • NO INSTALL</div>
+    <h1>ArtCraft Web Suite</h1>
+    <p class="lead">Open-source creative and productivity applications compiled to WebAssembly. Tap any card below to launch that application.</p>
+  </header>
 
+  <div class="controls">
+    <input type="text" id="search" class="search-box" placeholder="Search apps or tools...">
+    <div class="filters">
+      <button class="filter-btn active" data-filter="all">All</button>
+      <button class="filter-btn" data-filter="creative">Creative 2D</button>
+      <button class="filter-btn" data-filter="video">Video &amp; Audio</button>
+      <button class="filter-btn" data-filter="3d">3D &amp; CAD</button>
+      <button class="filter-btn" data-filter="office">Documents</button>
+    </div>
+  </div>
+
+  <main class="grid" id="appGrid"></main>
+
+  <footer>
+    <p>Powered by Storytold, Tangency Labs, and the Open Source Community • Updates hourly</p>
+  </footer>
+
+  <script src="./app.js" defer></script>
+</body>
+</html>
